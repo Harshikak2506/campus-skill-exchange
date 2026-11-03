@@ -1,0 +1,51 @@
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: campus-backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: campus-frontend
+    ports:
+      - "4173:4173"
+    environment:
+      API_PROXY_TARGET: http://backend:5000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7
+    container_name: campus-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mongodb_data:

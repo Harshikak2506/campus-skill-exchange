@@ -187,9 +187,7 @@ export default function App() {
   useEffect(() => {
     const loadStudents = async () => {
       try {
-        const response = await fetch(
-          "http://localhost:5000/api/students"
-        );
+        const response = await fetch("/api/students");
 
         if (!response.ok) {
           throw new Error("Failed to load students");
@@ -227,7 +225,7 @@ export default function App() {
 
     try {
       const response = await fetch(
-        "http://localhost:5000/api/login",
+        "/api/login",
         {
           method: "POST",
           headers: {
@@ -318,22 +316,19 @@ export default function App() {
     }
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/register",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            studentId: newUser.id.trim(),
-            name: newUser.name.trim(),
-            email: newUser.email.trim(),
-            phone: newUser.phone.trim(),
-            password: newUser.password,
-          }),
-        }
-      );
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          studentId: newUser.id.trim(),
+          name: newUser.name.trim(),
+          email: newUser.email.trim(),
+          phone: newUser.phone.trim(),
+          password: newUser.password,
+        }),
+      });
 
       const data = await response.json();
 
