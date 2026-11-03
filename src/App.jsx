@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 export default function App() {
   const [page, setPage] = useState("home");
   const [search, setSearch] = useState("");
@@ -187,7 +189,7 @@ export default function App() {
   useEffect(() => {
     const loadStudents = async () => {
       try {
-        const response = await fetch("/api/students");
+        const response = await fetch(`${API_BASE_URL}/api/students`);
 
         if (!response.ok) {
           throw new Error("Failed to load students");
@@ -225,7 +227,7 @@ export default function App() {
 
     try {
       const response = await fetch(
-        "/api/login",
+        `${API_BASE_URL}/api/login`,
         {
           method: "POST",
           headers: {
@@ -316,7 +318,7 @@ export default function App() {
     }
 
     try {
-      const response = await fetch("/api/register", {
+      const response = await fetch(`${API_BASE_URL}/api/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
