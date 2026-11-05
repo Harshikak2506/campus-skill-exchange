@@ -152,36 +152,44 @@ app.get("/", (req, res) => {
 
 app.post("/api/register", async (req, res) => {
   try {
+    const rawId = (
+      req.body.studentId ||
+      req.body.teacherId ||
+      req.body.id ||
+      ""
+    ).trim();
+
     const {
-      studentId,
       name,
       email,
       phone,
       password,
     } = req.body;
 
+    const isTeacher = req.body.role === "teacher";
+
     /* Validate required fields */
 
     if (
-      !studentId ||
+      !rawId ||
       !name ||
       !email ||
       !password
     ) {
       return res.status(400).json({
-        message: "Please fill all required fields",
+        message: `Please fill all required fields (${isTeacher ? "Teacher ID" : "Student ID"}, Name, Email, Password)`,
       });
     }
 
-    /* Check whether Student ID already exists */
+    /* Check whether ID already exists */
 
     const existingStudent = await Student.findOne({
-      studentId: studentId.trim(),
+      studentId: rawId,
     });
 
     if (existingStudent) {
       return res.status(400).json({
-        message: "Student ID already exists",
+        message: isTeacher ? "This Teacher ID already exists" : "This Student ID already exists",
       });
     }
 
@@ -209,7 +217,7 @@ app.post("/api/register", async (req, res) => {
     if (
       req.body.role === "admin" ||
       req.body.adminSecret === "admin123" ||
-      (studentId && studentId.toUpperCase().includes("ADMIN"))
+      (rawId && rawId.toUpperCase().includes("ADMIN"))
     ) {
       assignedRole = "admin";
     } else if (req.body.role === "teacher") {
@@ -219,7 +227,7 @@ app.post("/api/register", async (req, res) => {
     /* Create user account */
 
     const student = await Student.create({
-      studentId: studentId.trim(),
+      studentId: rawId,
       name: name.trim(),
       email: email.trim(),
       phone: phone || "",

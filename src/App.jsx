@@ -44,13 +44,23 @@ export default function App() {
   const [loginId, setLoginId] = useState("");
   const [loginPass, setLoginPass] = useState("");
 
-  const [newUser, setNewUser] = useState({
+  const [studentForm, setStudentForm] = useState({
     id: "",
     name: "",
     phone: "",
     email: "",
     password: "",
   });
+
+  const [teacherForm, setTeacherForm] = useState({
+    id: "",
+    name: "",
+    phone: "",
+    email: "",
+    password: "",
+  });
+
+  const [adminCode, setAdminCode] = useState("");
 
   // =========================================================
   // OFFER SKILL
@@ -358,16 +368,21 @@ export default function App() {
   // =========================================================
   // REGISTER
   // =========================================================
+  // REGISTER (STUDENT OR TEACHER)
+  // =========================================================
 
-  const register = async () => {
+  const handleRegister = async (role, formData) => {
+    const isTeacher = role === "teacher";
+    const idLabel = isTeacher ? "Teacher / Faculty ID" : "Student ID";
+
     if (
-      !newUser.id.trim() ||
-      !newUser.name.trim() ||
-      !newUser.email.trim() ||
-      !newUser.phone.trim() ||
-      !newUser.password
+      !formData.id.trim() ||
+      !formData.name.trim() ||
+      !formData.email.trim() ||
+      !formData.phone.trim() ||
+      !formData.password
     ) {
-      alert("Please fill all fields.");
+      alert(`Please fill all fields for ${isTeacher ? "Teacher" : "Student"} registration.`);
       return;
     }
 
@@ -378,13 +393,14 @@ export default function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          studentId: newUser.id.trim(),
-          name: newUser.name.trim(),
-          email: newUser.email.trim(),
-          phone: newUser.phone.trim(),
-          password: newUser.password,
-          role: newUser.isAdmin ? "admin" : (newUser.role || "student"),
-          adminSecret: newUser.adminSecret || "",
+          studentId: formData.id.trim(),
+          teacherId: formData.id.trim(),
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+          password: formData.password,
+          role: role,
+          adminSecret: adminCode.trim(),
         }),
       });
 
@@ -397,7 +413,7 @@ export default function App() {
         return;
       }
 
-      const student = {
+      const registeredUser = {
         id: data.student.studentId,
         name: data.student.name,
         email: data.student.email,
@@ -406,32 +422,28 @@ export default function App() {
           data.student.role ||
           (data.student.studentId?.toUpperCase().includes("ADMIN")
             ? "admin"
-            : newUser.role || "student"),
+            : role),
       };
 
       // Add user to frontend state
-      setUsers((prevUsers) => [...prevUsers, student]);
+      setUsers((prevUsers) => [...prevUsers, registeredUser]);
 
       // Automatically log in
-      setCurrentUser(student);
+      setCurrentUser(registeredUser);
 
       setShowRegister(false);
       setPage("dashboard");
 
-      setNewUser({
-        id: "",
-        name: "",
-        phone: "",
-        email: "",
-        password: "",
-        role: "student",
-        isAdmin: false,
-        adminSecret: "",
-      });
+      setStudentForm({ id: "", name: "", phone: "", email: "", password: "" });
+      setTeacherForm({ id: "", name: "", phone: "", email: "", password: "" });
+      setAdminCode("");
 
-      alert("Registration Successful!");
+      alert(`${isTeacher ? "Teacher" : "Student"} Registration Successful! Welcome, ${registeredUser.name}!`);
     } catch (error) {
       console.error("Registration error:", error);
+      alert("Cannot connect to server. Make sure the backend is running.");
+    }
+  };
 
       alert(
         "Cannot connect to server. Make sure the backend is running on port 5000."
@@ -1793,131 +1805,194 @@ export default function App() {
       {showRegister && (
         <div className="modal-overlay">
 
-          <div className="modal">
+          <div className="modal modal-register-wide">
 
-            <h2>Student Registration</h2>
+            <div style={{ textAlign: "center", marginBottom: "8px" }}>
+              <h2 style={{ fontSize: "2.3rem", color: "#172e6a", marginBottom: "4px" }}>
+                Campus Registration
+              </h2>
+              <p style={{ color: "#64748b", fontSize: "1.05rem" }}>
+                Choose your portal below to register as a Student or Teacher
+              </p>
+            </div>
 
-            <input
-              placeholder="Student ID"
-              value={newUser.id}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  id: e.target.value,
-                })
-              }
-            />
+            <div className="register-adjacent-container">
 
-            <input
-              placeholder="Full Name"
-              value={newUser.name}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  name: e.target.value,
-                })
-              }
-            />
+              {/* WINDOW 1: STUDENT REGISTRATION */}
+              <div className="register-column-card student-card">
+                <h3 style={{ color: "#1d4ed8" }}>🎓 Student Registration</h3>
+                <p className="subtitle">Learn new skills and request mentorship</p>
 
-            <input
-              placeholder="Phone"
-              value={newUser.phone}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  phone: e.target.value,
-                })
-              }
-            />
+                <input
+                  placeholder="Student ID (e.g. 2024ayush)"
+                  value={studentForm.id}
+                  onChange={(e) =>
+                    setStudentForm({
+                      ...studentForm,
+                      id: e.target.value,
+                    })
+                  }
+                />
 
-            <input
-              placeholder="Email"
-              value={newUser.email}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  email: e.target.value,
-                })
-              }
-            />
+                <input
+                  placeholder="Full Name"
+                  value={studentForm.name}
+                  onChange={(e) =>
+                    setStudentForm({
+                      ...studentForm,
+                      name: e.target.value,
+                    })
+                  }
+                />
 
-            <div style={{ margin: "12px 0 6px 0", textAlign: "left" }}>
-              <label style={{ fontWeight: "600", display: "block", marginBottom: "8px", fontSize: "0.95rem" }}>
-                Select Role:
-              </label>
-              <div style={{ display: "flex", gap: "16px", marginBottom: "8px" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.95rem" }}>
-                  <input
-                    type="radio"
-                    name="registrationRole"
-                    value="student"
-                    checked={newUser.role !== "teacher"}
-                    onChange={() => setNewUser({ ...newUser, role: "student" })}
-                  />
-                  <span>🎓 Student</span>
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.95rem" }}>
-                  <input
-                    type="radio"
-                    name="registrationRole"
-                    value="teacher"
-                    checked={newUser.role === "teacher"}
-                    onChange={() => setNewUser({ ...newUser, role: "teacher" })}
-                  />
-                  <span>👨‍🏫 Teacher / Instructor</span>
-                </label>
+                <input
+                  placeholder="Contact Phone"
+                  value={studentForm.phone}
+                  onChange={(e) =>
+                    setStudentForm({
+                      ...studentForm,
+                      phone: e.target.value,
+                    })
+                  }
+                />
+
+                <input
+                  placeholder="Student Email"
+                  value={studentForm.email}
+                  onChange={(e) =>
+                    setStudentForm({
+                      ...studentForm,
+                      email: e.target.value,
+                    })
+                  }
+                />
+
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={studentForm.password}
+                  onChange={(e) =>
+                    setStudentForm({
+                      ...studentForm,
+                      password: e.target.value,
+                    })
+                  }
+                />
+
+                <button
+                  type="button"
+                  onClick={() => handleRegister("student", studentForm)}
+                >
+                  Register as Student
+                </button>
               </div>
-            </div>
 
-            <input
-              type="password"
-              placeholder="Password"
-              value={newUser.password}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  password: e.target.value,
-                })
-              }
-            />
+              {/* WINDOW 2: TEACHER REGISTRATION */}
+              <div className="register-column-card teacher-card">
+                <h3 style={{ color: "#047857" }}>👨‍🏫 Teacher / Faculty Registration</h3>
+                <p className="subtitle">Publish courses, share skills, and teach</p>
 
-            <div style={{ margin: "10px 0", textAlign: "left", fontSize: "0.9rem" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                 <input
-                  type="checkbox"
-                  checked={newUser.isAdmin || false}
+                  placeholder="Teacher / Faculty ID (e.g. PROF_AYUSH)"
+                  value={teacherForm.id}
                   onChange={(e) =>
-                    setNewUser({
-                      ...newUser,
-                      isAdmin: e.target.checked,
+                    setTeacherForm({
+                      ...teacherForm,
+                      id: e.target.value,
                     })
                   }
                 />
-                <span>Register as Admin (Code: <code>admin123</code>)</span>
-              </label>
-              {newUser.isAdmin && (
+
                 <input
-                  style={{ marginTop: "8px" }}
-                  placeholder="Admin Code (enter admin123)"
-                  value={newUser.adminSecret || ""}
+                  placeholder="Full Name (with Prof./Dr. prefix)"
+                  value={teacherForm.name}
                   onChange={(e) =>
-                    setNewUser({
-                      ...newUser,
-                      adminSecret: e.target.value,
+                    setTeacherForm({
+                      ...teacherForm,
+                      name: e.target.value,
                     })
                   }
                 />
-              )}
+
+                <input
+                  placeholder="Contact Phone"
+                  value={teacherForm.phone}
+                  onChange={(e) =>
+                    setTeacherForm({
+                      ...teacherForm,
+                      phone: e.target.value,
+                    })
+                  }
+                />
+
+                <input
+                  placeholder="Teacher / Faculty Email"
+                  value={teacherForm.email}
+                  onChange={(e) =>
+                    setTeacherForm({
+                      ...teacherForm,
+                      email: e.target.value,
+                    })
+                  }
+                />
+
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={teacherForm.password}
+                  onChange={(e) =>
+                    setTeacherForm({
+                      ...teacherForm,
+                      password: e.target.value,
+                    })
+                  }
+                />
+
+                <button
+                  type="button"
+                  onClick={() => handleRegister("teacher", teacherForm)}
+                >
+                  Register as Teacher
+                </button>
+              </div>
+
             </div>
 
-            <button onClick={register}>
-              Register
-            </button>
+            {/* Optional Admin Passcode */}
+            <div style={{ marginTop: "14px", textAlign: "center" }}>
+              <input
+                style={{
+                  maxWidth: "340px",
+                  margin: "0 auto",
+                  padding: "8px 14px",
+                  fontSize: "14px",
+                  textAlign: "center",
+                  display: "inline-block",
+                  borderRadius: "8px",
+                  border: "1px dashed #94a3b8",
+                }}
+                placeholder="Admin Passcode (optional: admin123)"
+                value={adminCode}
+                onChange={(e) => setAdminCode(e.target.value)}
+              />
+            </div>
 
             <button
-              onClick={() =>
-                setShowRegister(false)
-              }
+              type="button"
+              onClick={() => setShowRegister(false)}
+              style={{
+                width: "auto",
+                margin: "14px auto 0 auto",
+                display: "block",
+                padding: "10px 32px",
+                backgroundColor: "#64748b",
+                color: "#fff",
+                border: "none",
+                borderRadius: "10px",
+                fontSize: "16px",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
             >
               Cancel
             </button>

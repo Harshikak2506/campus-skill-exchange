@@ -340,6 +340,92 @@ body {
   pointer-events: auto;
 }
 
+.modal.modal-register-wide {
+  width: 960px;
+  max-width: 95vw;
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 35px 40px;
+}
+
+.register-adjacent-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 20px;
+}
+
+@media (max-width: 800px) {
+  .register-adjacent-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.register-column-card {
+  background: #f8fafc;
+  border-radius: 20px;
+  padding: 24px;
+  border: 1.5px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+}
+
+.register-column-card.student-card {
+  border-top: 6px solid #2563eb;
+}
+
+.register-column-card.teacher-card {
+  border-top: 6px solid #059669;
+}
+
+.register-column-card h3 {
+  font-size: 1.6rem;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.register-column-card .subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.register-column-card input {
+  font-size: 16px !important;
+  padding: 13px 16px !important;
+  margin: 8px 0 !important;
+  border-radius: 12px !important;
+}
+
+.register-column-card button {
+  font-size: 18px !important;
+  padding: 14px !important;
+  border-radius: 12px !important;
+  margin-top: 14px !important;
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+}
+
+.register-column-card.student-card button {
+  background: #2563eb !important;
+  color: white !important;
+}
+
+.register-column-card.student-card button:hover {
+  background: #1d4ed8 !important;
+}
+
+.register-column-card.teacher-card button {
+  background: #059669 !important;
+  color: white !important;
+}
+
+.register-column-card.teacher-card button:hover {
+  background: #047857 !important;
+}
+
 .modal h2 {
   text-align: center;
   color: #172e6a;
