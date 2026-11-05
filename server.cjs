@@ -200,6 +200,12 @@ app.post("/api/register", async (req, res) => {
       10
     );
 
+    /* Check whether user requested admin access */
+    const isAdmin =
+      req.body.role === "admin" ||
+      req.body.adminSecret === "admin123" ||
+      (studentId && studentId.toUpperCase().includes("ADMIN"));
+
     /* Create student */
 
     const student = await Student.create({
@@ -208,9 +214,7 @@ app.post("/api/register", async (req, res) => {
       email: email.trim(),
       phone: phone || "",
       password: hashedPassword,
-
-      /* Every newly registered user is a student */
-      role: "student",
+      role: isAdmin ? "admin" : "student",
     });
 
     res.status(201).json({
@@ -587,6 +591,12 @@ app.get(
       const students = await Student.find()
         .select("-password");
 
+      const totalSkills = await Skill.countDocuments();
+
+      const loginLogs = await LoginLog.find()
+        .sort({ createdAt: -1 })
+        .limit(20);
+
       res.status(200).json({
 
         message: "Welcome Admin",
@@ -595,7 +605,11 @@ app.get(
 
         totalStudents: students.length,
 
+        totalSkills: totalSkills,
+
         students: students,
+
+        loginLogs: loginLogs,
       });
 
     } catch (err) {
@@ -605,6 +619,54 @@ app.get(
       res.status(500).json({
         message: "Server Error",
       });
+    }
+  }
+);
+
+/* =========================================================
+   ADMIN ROLE TOGGLE & REMOVE STUDENT
+========================================================= */
+
+app.put(
+  "/api/admin/role",
+  authenticateToken,
+  authorizeRole("admin"),
+  async (req, res) => {
+    try {
+      const { studentId, role } = req.body;
+      if (!["student", "admin"].includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+
+      const updated = await Student.findOneAndUpdate(
+        { studentId: studentId.trim() },
+        { role },
+        { new: true }
+      ).select("-password");
+
+      res.status(200).json({
+        message: "Role updated successfully",
+        student: updated,
+      });
+    } catch (err) {
+      console.log("ROLE ERROR:", err);
+      res.status(500).json({ message: "Server Error" });
+    }
+  }
+);
+
+app.delete(
+  "/api/admin/student/:studentId",
+  authenticateToken,
+  authorizeRole("admin"),
+  async (req, res) => {
+    try {
+      const { studentId } = req.params;
+      await Student.findOneAndDelete({ studentId: studentId.trim() });
+      res.status(200).json({ message: "Student removed successfully" });
+    } catch (err) {
+      console.log("DELETE STUDENT ERROR:", err);
+      res.status(500).json({ message: "Server Error" });
     }
   }
 );

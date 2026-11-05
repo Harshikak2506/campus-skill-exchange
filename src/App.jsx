@@ -163,6 +163,19 @@ export default function App() {
   });
 
   // =========================================================
+  // ADMIN DASHBOARD STATE
+  // =========================================================
+
+  const [adminData, setAdminData] = useState({
+    totalStudents: 0,
+    totalSkills: 0,
+    students: [],
+    loginLogs: [],
+  });
+  const [adminSearch, setAdminSearch] = useState("");
+  const [adminLoading, setAdminLoading] = useState(false);
+
+  // =========================================================
   // SAVE LOCAL DATA
   // =========================================================
 
@@ -252,6 +265,91 @@ export default function App() {
   }, []);
 
   // =========================================================
+  // ADMIN DASHBOARD FUNCTIONS
+  // =========================================================
+
+  const fetchAdminData = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    setAdminLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/dashboard`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to load admin data");
+      }
+
+      const data = await response.json();
+      setAdminData(data);
+    } catch (err) {
+      console.error("Admin fetch error:", err);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (page === "admin" && currentUser) {
+      fetchAdminData();
+    }
+  }, [page, currentUser]);
+
+  const toggleStudentRole = async (studentId, currentRole) => {
+    const newRole = currentRole === "admin" ? "student" : "admin";
+    const token = localStorage.getItem("token");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/role`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studentId, role: newRole }),
+      });
+      if (response.ok) {
+        alert(`User role updated to ${newRole}!`);
+        fetchAdminData();
+      }
+    } catch (err) {
+      alert("Could not update role");
+    }
+  };
+
+  const deleteStudent = async (studentId) => {
+    if (!window.confirm(`Are you sure you want to remove student ${studentId}?`)) return;
+    const token = localStorage.getItem("token");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/student/${studentId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        alert("Student removed!");
+        fetchAdminData();
+      }
+    } catch (err) {
+      alert("Could not remove student");
+    }
+  };
+
+  const filteredAdminStudents = (adminData.students || []).filter((s) => {
+    const q = adminSearch.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      (s.studentId && s.studentId.toLowerCase().includes(q)) ||
+      (s.name && s.name.toLowerCase().includes(q)) ||
+      (s.email && s.email.toLowerCase().includes(q))
+    );
+  });
+
+  // =========================================================
   // LOGIN
   // =========================================================
 
@@ -296,6 +394,11 @@ export default function App() {
         name: data.student.name,
         email: data.student.email,
         phone: data.student.phone,
+        role:
+          data.student.role ||
+          (data.student.studentId?.toUpperCase().includes("ADMIN")
+            ? "admin"
+            : "student"),
       };
 
       // Update users
@@ -365,6 +468,8 @@ export default function App() {
           email: newUser.email.trim(),
           phone: newUser.phone.trim(),
           password: newUser.password,
+          role: newUser.isAdmin ? "admin" : "student",
+          adminSecret: newUser.adminSecret || "",
         }),
       });
 
@@ -382,6 +487,11 @@ export default function App() {
         name: data.student.name,
         email: data.student.email,
         phone: data.student.phone,
+        role:
+          data.student.role ||
+          (data.student.studentId?.toUpperCase().includes("ADMIN")
+            ? "admin"
+            : "student"),
       };
 
       // Add user to frontend state
@@ -399,6 +509,8 @@ export default function App() {
         phone: "",
         email: "",
         password: "",
+        isAdmin: false,
+        adminSecret: "",
       });
 
       alert("Registration Successful!");
@@ -673,6 +785,22 @@ export default function App() {
               >
                 Dashboard
               </button>
+
+              {(currentUser.role === "admin" ||
+                currentUser.id?.toUpperCase().includes("ADMIN")) && (
+                <button
+                  onClick={() => setPage("admin")}
+                  style={{
+                    backgroundColor: page === "admin" ? "#be123c" : "#e11d48",
+                    color: "white",
+                    fontWeight: "bold",
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                  }}
+                >
+                  🛡️ Admin Panel
+                </button>
+              )}
 
               <span>
                 🔔 {unread}
@@ -1236,6 +1364,270 @@ export default function App() {
         )}
 
       {/* =====================================================
+          ADMIN DASHBOARD
+      ===================================================== */}
+
+      {page === "admin" && currentUser && (
+        <section className="dashboard">
+          <div className="panel" style={{ borderLeft: "6px solid #e11d48" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <h2 style={{ fontSize: "2rem", color: "#12245e", marginBottom: "4px" }}>
+                  🛡️ Admin Control Center
+                </h2>
+                <p style={{ color: "#64748b" }}>
+                  Database administration, student directory, and platform analytics
+                </p>
+              </div>
+              <button
+                onClick={fetchAdminData}
+                style={{
+                  padding: "10px 18px",
+                  backgroundColor: "#1f3fa3",
+                  color: "#fff",
+                  borderRadius: "10px",
+                  border: "none",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                🔄 Refresh Live Data
+              </button>
+            </div>
+
+            {/* Metrics Cards */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "18px",
+                marginTop: "24px",
+              }}
+            >
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  padding: "20px",
+                  borderRadius: "16px",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: "2.4rem", fontWeight: "bold", color: "#166534" }}>
+                  {adminData.totalStudents ?? adminData.students?.length ?? 0}
+                </div>
+                <div style={{ color: "#15803d", fontWeight: "600", marginTop: "6px" }}>
+                  👥 Total Registered Students
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  padding: "20px",
+                  borderRadius: "16px",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: "2.4rem", fontWeight: "bold", color: "#1e40af" }}>
+                  {adminData.totalSkills ?? skills.length}
+                </div>
+                <div style={{ color: "#1d4ed8", fontWeight: "600", marginTop: "6px" }}>
+                  📚 Active Skills & Courses
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "#fff1f2",
+                  border: "1px solid #fecdd3",
+                  padding: "20px",
+                  borderRadius: "16px",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: "2.4rem", fontWeight: "bold", color: "#9f1239" }}>
+                  {adminData.loginLogs ? adminData.loginLogs.length : 0}
+                </div>
+                <div style={{ color: "#be123c", fontWeight: "600", marginTop: "6px" }}>
+                  🔑 Recent Login Records
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Student Management Panel */}
+          <div className="panel">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "14px",
+                marginBottom: "20px",
+              }}
+            >
+              <h3>Student Management Directory</h3>
+              <input
+                style={{
+                  padding: "10px 16px",
+                  width: "320px",
+                  maxWidth: "100%",
+                  borderRadius: "10px",
+                  border: "1px solid #cbd5e1",
+                  fontSize: "0.95rem",
+                }}
+                placeholder="🔍 Search by ID, Name, or Email..."
+                value={adminSearch}
+                onChange={(e) => setAdminSearch(e.target.value)}
+              />
+            </div>
+
+            {adminLoading ? (
+              <p>Loading database records...</p>
+            ) : filteredAdminStudents.length === 0 ? (
+              <p>No students found matching your search.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    textAlign: "left",
+                    fontSize: "0.95rem",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+                      <th style={{ padding: "14px 16px" }}>Student ID</th>
+                      <th style={{ padding: "14px 16px" }}>Name</th>
+                      <th style={{ padding: "14px 16px" }}>Email</th>
+                      <th style={{ padding: "14px 16px" }}>Phone</th>
+                      <th style={{ padding: "14px 16px" }}>Role</th>
+                      <th style={{ padding: "14px 16px", textAlign: "center" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAdminStudents.map((st) => (
+                      <tr
+                        key={st._id || st.studentId}
+                        style={{ borderBottom: "1px solid #e2e8f0" }}
+                      >
+                        <td style={{ padding: "14px 16px", fontWeight: "600" }}>{st.studentId}</td>
+                        <td style={{ padding: "14px 16px" }}>{st.name}</td>
+                        <td style={{ padding: "14px 16px", color: "#64748b" }}>{st.email}</td>
+                        <td style={{ padding: "14px 16px", color: "#64748b" }}>
+                          {st.phone || "—"}
+                        </td>
+                        <td style={{ padding: "14px 16px" }}>
+                          <span
+                            style={{
+                              padding: "4px 12px",
+                              borderRadius: "999px",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              backgroundColor: st.role === "admin" ? "#ffe4e6" : "#e0e7ff",
+                              color: st.role === "admin" ? "#e11d48" : "#3730a3",
+                            }}
+                          >
+                            {st.role?.toUpperCase() || "STUDENT"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                          <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                            <button
+                              onClick={() => toggleStudentRole(st.studentId, st.role)}
+                              style={{
+                                padding: "6px 12px",
+                                fontSize: "0.85rem",
+                                borderRadius: "8px",
+                                border: "none",
+                                backgroundColor: st.role === "admin" ? "#64748b" : "#3b82f6",
+                                color: "#fff",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {st.role === "admin" ? "Demote" : "Make Admin"}
+                            </button>
+                            <button
+                              onClick={() => deleteStudent(st.studentId)}
+                              style={{
+                                padding: "6px 12px",
+                                fontSize: "0.85rem",
+                                borderRadius: "8px",
+                                border: "none",
+                                backgroundColor: "#ef4444",
+                                color: "#fff",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Login Activity Logs */}
+          <div className="panel">
+            <h3>Recent Login Activity Logs</h3>
+            {adminData.loginLogs && adminData.loginLogs.length > 0 ? (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    textAlign: "left",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+                      <th style={{ padding: "12px 14px" }}>Student ID</th>
+                      <th style={{ padding: "12px 14px" }}>Email</th>
+                      <th style={{ padding: "12px 14px" }}>Action</th>
+                      <th style={{ padding: "12px 14px" }}>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminData.loginLogs.map((log, i) => (
+                      <tr key={log._id || i} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                        <td style={{ padding: "12px 14px", fontWeight: "600" }}>{log.studentId}</td>
+                        <td style={{ padding: "12px 14px", color: "#64748b" }}>{log.email}</td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <span style={{ color: "#16a34a", fontWeight: "bold" }}>● {log.action}</span>
+                        </td>
+                        <td style={{ padding: "12px 14px", color: "#64748b" }}>
+                          {log.createdAt ? new Date(log.createdAt).toLocaleString() : "Recent"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p>No recent login logs recorded.</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* =====================================================
           LOGIN MODAL
       ===================================================== */}
 
@@ -1346,6 +1738,35 @@ export default function App() {
                 })
               }
             />
+
+            <div style={{ margin: "10px 0", textAlign: "left", fontSize: "0.9rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={newUser.isAdmin || false}
+                  onChange={(e) =>
+                    setNewUser({
+                      ...newUser,
+                      isAdmin: e.target.checked,
+                    })
+                  }
+                />
+                <span>Register as Admin (Code: <code>admin123</code>)</span>
+              </label>
+              {newUser.isAdmin && (
+                <input
+                  style={{ marginTop: "8px" }}
+                  placeholder="Admin Code (enter admin123)"
+                  value={newUser.adminSecret || ""}
+                  onChange={(e) =>
+                    setNewUser({
+                      ...newUser,
+                      adminSecret: e.target.value,
+                    })
+                  }
+                />
+              )}
+            </div>
 
             <button onClick={register}>
               Register
