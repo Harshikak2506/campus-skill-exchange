@@ -216,6 +216,42 @@ export default function App() {
   }, []);
 
   // =========================================================
+  // LOAD SKILLS FROM MONGODB
+  // =========================================================
+
+  useEffect(() => {
+    const loadSkills = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/skills`);
+
+        if (!response.ok) {
+          throw new Error("Failed to load skills");
+        }
+
+        const data = await response.json();
+
+        console.log("Skills from MongoDB:", data);
+
+        if (Array.isArray(data) && data.length > 0) {
+          const cleanedSkills = data.map((skill) => ({
+            id: skill._id || skill.id,
+            name: skill.name,
+            category: skill.category,
+            level: skill.level,
+            teacher: skill.teacher,
+          }));
+
+          setSkills(cleanedSkills);
+        }
+      } catch (error) {
+        console.error("Could not load skills from MongoDB:", error);
+      }
+    };
+
+    loadSkills();
+  }, []);
+
+  // =========================================================
   // LOGIN
   // =========================================================
 
@@ -457,7 +493,7 @@ export default function App() {
   // ADD SKILL
   // =========================================================
 
-  const addSkill = () => {
+  const addSkill = async () => {
     if (!currentUser) {
       alert("Please login first.");
       return;
@@ -468,26 +504,49 @@ export default function App() {
       return;
     }
 
-    const newSkill = {
-      id: Date.now(),
-      name: offerSkill.name.trim(),
-      category: offerSkill.category,
-      level: offerSkill.level,
-      teacher: currentUser.name,
-    };
+    const token = localStorage.getItem("token");
 
-    setSkills((prevSkills) => [
-      ...prevSkills,
-      newSkill,
-    ]);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/skills`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: offerSkill.name.trim(),
+          category: offerSkill.category,
+          level: offerSkill.level,
+        }),
+      });
 
-    setOfferSkill({
-      name: "",
-      category: "Coding",
-      level: "Beginner",
-    });
+      const data = await response.json();
 
-    alert("Skill Added!");
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to add skill");
+      }
+
+      const createdSkill = {
+        id: (data.skill && data.skill._id) || Date.now(),
+        name: (data.skill && data.skill.name) || offerSkill.name.trim(),
+        category: (data.skill && data.skill.category) || offerSkill.category,
+        level: (data.skill && data.skill.level) || offerSkill.level,
+        teacher: (data.skill && data.skill.teacher) || currentUser.name,
+      };
+
+      setSkills((prevSkills) => [...prevSkills, createdSkill]);
+
+      setOfferSkill({
+        name: "",
+        category: "Coding",
+        level: "Beginner",
+      });
+
+      alert("Skill Added Successfully to MongoDB!");
+    } catch (err) {
+      console.error("Error adding skill:", err);
+      alert(err.message || "Could not add skill to server.");
+    }
   };
 
   // =========================================================

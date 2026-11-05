@@ -654,7 +654,26 @@ app.get("/api/skills", async (req, res) => {
 
   try {
 
-    const skills = await Skill.find();
+    let skills = await Skill.find();
+
+    if (skills.length === 0) {
+      const defaultSkills = [
+        { name: "Java", category: "Coding", level: "Intermediate", teacher: "Harshika" },
+        { name: "Python", category: "Coding", level: "Advanced", teacher: "Priya" },
+        { name: "React", category: "Coding", level: "Intermediate", teacher: "Harshika" },
+        { name: "C", category: "Coding", level: "Beginner", teacher: "Rahul" },
+        { name: "C++", category: "Coding", level: "Intermediate", teacher: "Rahul" },
+        { name: "Canva", category: "Design", level: "Beginner", teacher: "Rahul" },
+        { name: "Figma", category: "Design", level: "Intermediate", teacher: "Priya" },
+        { name: "Photoshop", category: "Design", level: "Advanced", teacher: "Harshika" },
+        { name: "Marketing", category: "Business", level: "Intermediate", teacher: "Priya" },
+        { name: "Excel", category: "Business", level: "Advanced", teacher: "Rahul" },
+        { name: "Power BI", category: "Business", level: "Intermediate", teacher: "Harshika" },
+        { name: "Public Speaking", category: "Communication", level: "Advanced", teacher: "Priya" },
+      ];
+
+      skills = await Skill.insertMany(defaultSkills);
+    }
 
     res.status(200).json(skills);
 
