@@ -445,12 +445,6 @@ export default function App() {
     }
   };
 
-      alert(
-        "Cannot connect to server. Make sure the backend is running on port 5000."
-      );
-    }
-  };
-
   // =========================================================
   // LOGOUT
   // =========================================================
