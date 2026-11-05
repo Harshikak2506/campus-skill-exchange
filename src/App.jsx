@@ -269,7 +269,7 @@ export default function App() {
 
   const login = async () => {
     if (!loginId.trim() || !loginPass) {
-      alert("Please enter Student ID and Password.");
+      alert("Please enter Student ID / Email and Password.");
       return;
     }
 
@@ -283,6 +283,7 @@ export default function App() {
           },
           body: JSON.stringify({
             studentId: loginId.trim(),
+            email: loginId.trim(),
             password: loginPass,
           }),
         }
@@ -293,7 +294,7 @@ export default function App() {
       console.log("Login response:", data);
 
       if (!response.ok) {
-        alert(data.message || "Invalid Student ID or Password");
+        alert(data.message || "Invalid Student ID / Email or Password");
         return;
       }
 
@@ -1749,10 +1750,10 @@ export default function App() {
 
           <div className="modal">
 
-            <h2>Student Login</h2>
+            <h2>Login to Skill Exchange</h2>
 
             <input
-              placeholder="Student ID"
+              placeholder="Student ID or Email"
               value={loginId}
               onChange={(e) =>
                 setLoginId(e.target.value)

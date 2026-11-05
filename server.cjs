@@ -256,35 +256,47 @@ app.post("/api/register", async (req, res) => {
 
 app.post("/api/login", async (req, res) => {
   try {
-    const {
-      studentId,
-      password,
-    } = req.body;
+    const identifier = (
+      req.body.studentId ||
+      req.body.email ||
+      req.body.identifier ||
+      ""
+    ).trim();
+    const password = req.body.password;
 
     /* Validate input */
 
-    if (!studentId || !password) {
+    if (!identifier || !password) {
       return res.status(400).json({
-        message: "Student ID and Password are required",
+        message: "Student ID or Email and Password are required",
       });
     }
 
-    /* Find student */
+    /* Escape regex characters for safe query */
+    const safeIdentifier = identifier.replace(
+      /[-[\]{}()*+?.,\\^$|#\s]/g,
+      "\\$&"
+    );
+
+    /* Find student by Student ID or Email (case-insensitive) */
 
     const student = await Student.findOne({
-      studentId: studentId.trim(),
+      $or: [
+        { studentId: { $regex: new RegExp(`^${safeIdentifier}$`, "i") } },
+        { email: { $regex: new RegExp(`^${safeIdentifier}$`, "i") } },
+      ],
     });
 
     if (!student) {
 
       await LoginLog.create({
-        studentId: studentId,
-        email: "N/A",
-        action: "LOGIN_FAILED_STUDENT_NOT_FOUND",
+        studentId: identifier,
+        email: identifier.includes("@") ? identifier : "N/A",
+        action: "LOGIN_FAILED_NOT_FOUND",
       });
 
       return res.status(400).json({
-        message: "Student Not Found",
+        message: "No account found with this Student ID or Email",
       });
     }
 
