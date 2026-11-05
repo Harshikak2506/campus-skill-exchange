@@ -63,7 +63,7 @@ const studentsSchema = new mongoose.Schema(
     /* Experiment 6 - User Role */
     role: {
       type: String,
-      enum: ["student", "admin"],
+      enum: ["student", "teacher", "admin"],
       default: "student",
     },
   },
@@ -99,7 +99,11 @@ const skillsSchema = new mongoose.Schema(
     name: String,
     category: String,
     level: String,
+    description: String,
     teacher: String,
+    teacherId: String,
+    teacherEmail: String,
+    teacherPhone: String,
   },
   {
     timestamps: true,
@@ -200,13 +204,19 @@ app.post("/api/register", async (req, res) => {
       10
     );
 
-    /* Check whether user requested admin access */
-    const isAdmin =
+    /* Determine user role */
+    let assignedRole = "student";
+    if (
       req.body.role === "admin" ||
       req.body.adminSecret === "admin123" ||
-      (studentId && studentId.toUpperCase().includes("ADMIN"));
+      (studentId && studentId.toUpperCase().includes("ADMIN"))
+    ) {
+      assignedRole = "admin";
+    } else if (req.body.role === "teacher") {
+      assignedRole = "teacher";
+    }
 
-    /* Create student */
+    /* Create user account */
 
     const student = await Student.create({
       studentId: studentId.trim(),
@@ -214,7 +224,7 @@ app.post("/api/register", async (req, res) => {
       email: email.trim(),
       phone: phone || "",
       password: hashedPassword,
-      role: isAdmin ? "admin" : "student",
+      role: assignedRole,
     });
 
     res.status(201).json({
@@ -713,29 +723,17 @@ app.get(
 ========================================================= */
 
 app.get("/api/skills", async (req, res) => {
-
   try {
+    // Automatically purge legacy dummy mock skills (which lack a real registered teacherId)
+    await Skill.deleteMany({
+      $or: [
+        { teacherId: { $exists: false } },
+        { teacherId: null },
+        { teacherId: "" },
+      ],
+    });
 
-    let skills = await Skill.find();
-
-    if (skills.length === 0) {
-      const defaultSkills = [
-        { name: "Java", category: "Coding", level: "Intermediate", teacher: "Harshika" },
-        { name: "Python", category: "Coding", level: "Advanced", teacher: "Priya" },
-        { name: "React", category: "Coding", level: "Intermediate", teacher: "Harshika" },
-        { name: "C", category: "Coding", level: "Beginner", teacher: "Rahul" },
-        { name: "C++", category: "Coding", level: "Intermediate", teacher: "Rahul" },
-        { name: "Canva", category: "Design", level: "Beginner", teacher: "Rahul" },
-        { name: "Figma", category: "Design", level: "Intermediate", teacher: "Priya" },
-        { name: "Photoshop", category: "Design", level: "Advanced", teacher: "Harshika" },
-        { name: "Marketing", category: "Business", level: "Intermediate", teacher: "Priya" },
-        { name: "Excel", category: "Business", level: "Advanced", teacher: "Rahul" },
-        { name: "Power BI", category: "Business", level: "Intermediate", teacher: "Harshika" },
-        { name: "Public Speaking", category: "Communication", level: "Advanced", teacher: "Priya" },
-      ];
-
-      skills = await Skill.insertMany(defaultSkills);
-    }
+    const skills = await Skill.find().sort({ createdAt: -1 });
 
     res.status(200).json(skills);
 
@@ -751,8 +749,8 @@ app.get("/api/skills", async (req, res) => {
 
 
 /* =========================================================
-   ADD SKILL
-   Only authenticated users
+   ADD SKILL / COURSE
+   Available to Teachers and Admins
 ========================================================= */
 
 app.post(
@@ -766,6 +764,7 @@ app.post(
         name,
         category,
         level,
+        description,
       } = req.body;
 
       if (!name || !category || !level) {
@@ -774,25 +773,36 @@ app.post(
         });
       }
 
-      const student = await Student.findOne({
+      const instructor = await Student.findOne({
         studentId: req.user.studentId,
       });
 
-      if (!student) {
+      if (!instructor) {
         return res.status(404).json({
-          message: "Student Not Found",
+          message: "User account not found",
+        });
+      }
+
+      // Check if user is a registered teacher or admin
+      if (instructor.role !== "teacher" && instructor.role !== "admin") {
+        return res.status(403).json({
+          message: "Only registered Teachers or Admins can post courses.",
         });
       }
 
       const skill = await Skill.create({
-        name: name,
+        name: name.trim(),
         category: category,
         level: level,
-        teacher: student.name,
+        description: description || "",
+        teacher: instructor.name,
+        teacherId: instructor.studentId,
+        teacherEmail: instructor.email,
+        teacherPhone: instructor.phone || "",
       });
 
       res.status(201).json({
-        message: "Skill Added Successfully",
+        message: "Course Posted Successfully",
         skill: skill,
       });
 
@@ -800,6 +810,45 @@ app.post(
 
       console.log("ADD SKILL ERROR:", err);
 
+      res.status(500).json({
+        message: "Server Error",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   DELETE SKILL / COURSE
+========================================================= */
+
+app.delete(
+  "/api/skills/:id",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const skill = await Skill.findById(req.params.id);
+
+      if (!skill) {
+        return res.status(404).json({ message: "Course not found" });
+      }
+
+      // Ensure only the instructor who posted it or an admin can delete it
+      if (
+        skill.teacherId !== req.user.studentId &&
+        req.user.role !== "admin"
+      ) {
+        return res.status(403).json({
+          message: "You are not authorized to delete this course.",
+        });
+      }
+
+      await Skill.findByIdAndDelete(req.params.id);
+
+      res.status(200).json({
+        message: "Course deleted successfully",
+      });
+    } catch (err) {
+      console.log("DELETE SKILL ERROR:", err);
       res.status(500).json({
         message: "Server Error",
       });

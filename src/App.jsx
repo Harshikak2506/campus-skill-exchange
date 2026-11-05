@@ -20,101 +20,10 @@ export default function App() {
   });
 
   // =========================================================
-  // SKILLS
+  // SKILLS (REAL COURSES POSTED BY REGISTERED TEACHERS)
   // =========================================================
 
-  const [skills, setSkills] = useState(() => {
-    const saved = localStorage.getItem("skills");
-
-    return saved
-      ? JSON.parse(saved)
-      : [
-          {
-            id: 1,
-            name: "Java",
-            category: "Coding",
-            level: "Intermediate",
-            teacher: "Harshika",
-          },
-          {
-            id: 2,
-            name: "Python",
-            category: "Coding",
-            level: "Advanced",
-            teacher: "Priya",
-          },
-          {
-            id: 3,
-            name: "React",
-            category: "Coding",
-            level: "Intermediate",
-            teacher: "Harshika",
-          },
-          {
-            id: 4,
-            name: "C",
-            category: "Coding",
-            level: "Beginner",
-            teacher: "Rahul",
-          },
-          {
-            id: 5,
-            name: "C++",
-            category: "Coding",
-            level: "Intermediate",
-            teacher: "Rahul",
-          },
-          {
-            id: 6,
-            name: "Canva",
-            category: "Design",
-            level: "Beginner",
-            teacher: "Rahul",
-          },
-          {
-            id: 7,
-            name: "Figma",
-            category: "Design",
-            level: "Intermediate",
-            teacher: "Priya",
-          },
-          {
-            id: 8,
-            name: "Photoshop",
-            category: "Design",
-            level: "Advanced",
-            teacher: "Harshika",
-          },
-          {
-            id: 9,
-            name: "Marketing",
-            category: "Business",
-            level: "Intermediate",
-            teacher: "Priya",
-          },
-          {
-            id: 10,
-            name: "Excel",
-            category: "Business",
-            level: "Advanced",
-            teacher: "Rahul",
-          },
-          {
-            id: 11,
-            name: "Power BI",
-            category: "Business",
-            level: "Intermediate",
-            teacher: "Harshika",
-          },
-          {
-            id: 12,
-            name: "Public Speaking",
-            category: "Communication",
-            level: "Advanced",
-            teacher: "Priya",
-          },
-        ];
-  });
+  const [skills, setSkills] = useState([]);
 
   // =========================================================
   // REQUESTS
@@ -180,8 +89,9 @@ export default function App() {
   // =========================================================
 
   useEffect(() => {
-    localStorage.setItem("skills", JSON.stringify(skills));
-  }, [skills]);
+    // Purge any legacy dummy skills cached locally in the browser
+    localStorage.removeItem("skills");
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("requests", JSON.stringify(requests));
@@ -245,13 +155,17 @@ export default function App() {
 
         console.log("Skills from MongoDB:", data);
 
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           const cleanedSkills = data.map((skill) => ({
             id: skill._id || skill.id,
             name: skill.name,
             category: skill.category,
             level: skill.level,
+            description: skill.description || "",
             teacher: skill.teacher,
+            teacherId: skill.teacherId || "",
+            teacherEmail: skill.teacherEmail || "",
+            teacherPhone: skill.teacherPhone || "",
           }));
 
           setSkills(cleanedSkills);
@@ -468,7 +382,7 @@ export default function App() {
           email: newUser.email.trim(),
           phone: newUser.phone.trim(),
           password: newUser.password,
-          role: newUser.isAdmin ? "admin" : "student",
+          role: newUser.isAdmin ? "admin" : (newUser.role || "student"),
           adminSecret: newUser.adminSecret || "",
         }),
       });
@@ -491,7 +405,7 @@ export default function App() {
           data.student.role ||
           (data.student.studentId?.toUpperCase().includes("ADMIN")
             ? "admin"
-            : "student"),
+            : newUser.role || "student"),
       };
 
       // Add user to frontend state
@@ -509,6 +423,7 @@ export default function App() {
         phone: "",
         email: "",
         password: "",
+        role: "student",
         isAdmin: false,
         adminSecret: "",
       });
@@ -545,8 +460,11 @@ export default function App() {
       return;
     }
 
-    if (skill.teacher === currentUser.name) {
-      alert("You already own this skill.");
+    if (
+      skill.teacher === currentUser.name ||
+      (skill.teacherId && skill.teacherId === currentUser.id)
+    ) {
+      alert("You are the instructor of this course.");
       return;
     }
 
@@ -563,22 +481,24 @@ export default function App() {
     }
 
     const teacher = users.find(
-      (u) => u.name === skill.teacher
-    );
-
-    if (!teacher) {
-      alert("Teacher information not found.");
-      return;
-    }
+      (u) =>
+        u.name === skill.teacher ||
+        (skill.teacherId && u.id === skill.teacherId)
+    ) || {
+      name: skill.teacher,
+      phone: skill.teacherPhone || "Available upon request acceptance",
+      email: skill.teacherEmail || "Available upon request acceptance",
+    };
 
     const newRequest = {
       id: Date.now(),
       student: currentUser.name,
       teacher: skill.teacher,
+      teacherId: skill.teacherId || "",
       skill: skill.name,
       status: "Pending",
-      phone: teacher.phone,
-      email: teacher.email,
+      phone: teacher.phone || skill.teacherPhone || "N/A",
+      email: teacher.email || skill.teacherEmail || "N/A",
     };
 
     setRequests((prevRequests) => [
@@ -586,7 +506,7 @@ export default function App() {
       newRequest,
     ]);
 
-    alert("Request Sent!");
+    alert("Request Sent to Instructor!");
   };
 
   // =========================================================
@@ -602,7 +522,7 @@ export default function App() {
   };
 
   // =========================================================
-  // ADD SKILL
+  // ADD SKILL / COURSE
   // =========================================================
 
   const addSkill = async () => {
@@ -611,8 +531,13 @@ export default function App() {
       return;
     }
 
+    if (currentUser.role !== "teacher" && currentUser.role !== "admin") {
+      alert("Only registered Teachers or Admins can post courses. Please register with a Teacher account.");
+      return;
+    }
+
     if (!offerSkill.name.trim()) {
-      alert("Please enter a skill name.");
+      alert("Please enter a course name.");
       return;
     }
 
@@ -635,7 +560,7 @@ export default function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to add skill");
+        throw new Error(data.message || "Failed to post course");
       }
 
       const createdSkill = {
@@ -644,9 +569,12 @@ export default function App() {
         category: (data.skill && data.skill.category) || offerSkill.category,
         level: (data.skill && data.skill.level) || offerSkill.level,
         teacher: (data.skill && data.skill.teacher) || currentUser.name,
+        teacherId: currentUser.id,
+        teacherEmail: currentUser.email,
+        teacherPhone: currentUser.phone,
       };
 
-      setSkills((prevSkills) => [...prevSkills, createdSkill]);
+      setSkills((prevSkills) => [createdSkill, ...prevSkills]);
 
       setOfferSkill({
         name: "",
@@ -654,10 +582,33 @@ export default function App() {
         level: "Beginner",
       });
 
-      alert("Skill Added Successfully to MongoDB!");
+      alert("Course Published Successfully to Campus!");
     } catch (err) {
-      console.error("Error adding skill:", err);
-      alert(err.message || "Could not add skill to server.");
+      console.error("Error adding course:", err);
+      alert(err.message || "Could not post course to server.");
+    }
+  };
+
+  const deleteCourse = async (courseId) => {
+    if (!window.confirm("Are you sure you want to delete this course?")) return;
+    const token = localStorage.getItem("token");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/skills/${courseId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Could not delete course");
+      }
+
+      setSkills((prev) => prev.filter((s) => (s.id || s._id) !== courseId));
+      alert("Course deleted successfully!");
+    } catch (err) {
+      alert(err.message || "Could not delete course");
     }
   };
 
@@ -900,7 +851,22 @@ export default function App() {
           <div className="skills-grid">
 
             {filteredSkills.length === 0 ? (
-              <p>No skills found.</p>
+              <div style={{ textAlign: "center", padding: "40px 20px", gridColumn: "1 / -1" }}>
+                <p style={{ fontSize: "1.2rem", color: "#64748b", marginBottom: "10px" }}>
+                  No courses posted yet.
+                </p>
+                <p style={{ color: "#94a3b8" }}>
+                  Register or login with a <strong>Teacher</strong> account to publish courses to campus!
+                </p>
+                {currentUser && (currentUser.role === "teacher" || currentUser.role === "admin") && (
+                  <button
+                    onClick={() => setPage("dashboard")}
+                    style={{ marginTop: "14px", padding: "10px 22px" }}
+                  >
+                    ➕ Post a Course Now
+                  </button>
+                )}
+              </div>
             ) : (
               filteredSkills.map((skill) => (
 
@@ -923,22 +889,57 @@ export default function App() {
                     Offered by {skill.teacher}
                   </p>
 
-                  <button
-                    onClick={() =>
-                      sendRequest(skill)
-                    }
-                  >
-                    {requests.some(
-                      (r) =>
-                        currentUser &&
-                        r.student ===
-                          currentUser.name &&
-                        r.skill === skill.name &&
-                        r.teacher === skill.teacher
-                    )
-                      ? "Requested"
-                      : "Request to Learn"}
-                  </button>
+                  {currentUser &&
+                  (currentUser.name === skill.teacher ||
+                    (skill.teacherId && skill.teacherId === currentUser.id)) ? (
+                    <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                      <span
+                        style={{
+                          padding: "8px 12px",
+                          background: "#e0e7ff",
+                          color: "#3730a3",
+                          borderRadius: "8px",
+                          fontWeight: "600",
+                          fontSize: "0.85rem",
+                          flex: 1,
+                          textAlign: "center",
+                        }}
+                      >
+                        👨‍🏫 Your Course
+                      </span>
+                      <button
+                        onClick={() => deleteCourse(skill.id)}
+                        style={{
+                          background: "#ef4444",
+                          color: "#fff",
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          fontSize: "0.85rem",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        sendRequest(skill)
+                      }
+                    >
+                      {requests.some(
+                        (r) =>
+                          currentUser &&
+                          r.student ===
+                            currentUser.name &&
+                          r.skill === skill.name &&
+                          r.teacher === skill.teacher
+                      )
+                        ? "Requested"
+                        : "Request to Learn"}
+                    </button>
+                  )}
 
                 </div>
 
@@ -1003,58 +1004,170 @@ export default function App() {
             </div>
 
             {/* =================================================
-                OFFER NEW SKILL
+                TEACHER COURSE PUBLISHING PORTAL
             ================================================= */}
 
-            <div className="panel">
+            {(currentUser.role === "teacher" || currentUser.role === "admin") ? (
+              <>
+                <div className="panel" style={{ borderLeft: "6px solid #2563eb" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "16px",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                    }}
+                  >
+                    <h3>👨‍🏫 Post a New Course (Teacher Portal)</h3>
+                    <span
+                      style={{
+                        background: "#dbeafe",
+                        color: "#1e40af",
+                        padding: "6px 14px",
+                        borderRadius: "999px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      Instructor: {currentUser.name}
+                    </span>
+                  </div>
 
-              <h3>Offer a New Skill</h3>
+                  <input
+                    placeholder="Course name (e.g. Advanced Python, Full Stack React)"
+                    value={offerSkill.name}
+                    onChange={(e) =>
+                      setOfferSkill({
+                        ...offerSkill,
+                        name: e.target.value,
+                      })
+                    }
+                  />
 
-              <input
-                placeholder="Skill name"
-                value={offerSkill.name}
-                onChange={(e) =>
-                  setOfferSkill({
-                    ...offerSkill,
-                    name: e.target.value,
-                  })
-                }
-              />
+                  <select
+                    value={offerSkill.category}
+                    onChange={(e) =>
+                      setOfferSkill({
+                        ...offerSkill,
+                        category: e.target.value,
+                      })
+                    }
+                  >
+                    <option>Coding</option>
+                    <option>Design</option>
+                    <option>Business</option>
+                    <option>Communication</option>
+                  </select>
 
-              <select
-                value={offerSkill.category}
-                onChange={(e) =>
-                  setOfferSkill({
-                    ...offerSkill,
-                    category: e.target.value,
-                  })
-                }
+                  <select
+                    value={offerSkill.level}
+                    onChange={(e) =>
+                      setOfferSkill({
+                        ...offerSkill,
+                        level: e.target.value,
+                      })
+                    }
+                  >
+                    <option>Beginner</option>
+                    <option>Intermediate</option>
+                    <option>Advanced</option>
+                  </select>
+
+                  <button onClick={addSkill} style={{ marginTop: "14px" }}>
+                    🚀 Publish Course to Campus
+                  </button>
+                </div>
+
+                {/* MY COURSES LIST */}
+                {skills.filter(
+                  (s) =>
+                    s.teacher === currentUser.name ||
+                    (s.teacherId && s.teacherId === currentUser.id)
+                ).length > 0 && (
+                  <div className="panel">
+                    <h3>Courses You Teach</h3>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                        gap: "16px",
+                        marginTop: "12px",
+                      }}
+                    >
+                      {skills
+                        .filter(
+                          (s) =>
+                            s.teacher === currentUser.name ||
+                            (s.teacherId && s.teacherId === currentUser.id)
+                        )
+                        .map((s) => (
+                          <div
+                            key={s.id}
+                            style={{
+                              border: "1px solid #e2e8f0",
+                              padding: "16px",
+                              borderRadius: "14px",
+                              background: "#f8fafc",
+                            }}
+                          >
+                            <h4 style={{ color: "#1e3a8a", fontSize: "1.15rem", marginBottom: "6px" }}>
+                              {s.name}
+                            </h4>
+                            <p style={{ color: "#64748b", fontSize: "0.9rem", margin: "4px 0" }}>
+                              Category: {s.category} | Level: {s.level}
+                            </p>
+                            <button
+                              onClick={() => deleteCourse(s.id)}
+                              style={{
+                                background: "#ef4444",
+                                color: "#fff",
+                                padding: "6px 14px",
+                                borderRadius: "8px",
+                                border: "none",
+                                fontSize: "0.85rem",
+                                marginTop: "10px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Delete Course
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div
+                className="panel"
+                style={{
+                  borderLeft: "6px solid #10b981",
+                  background: "#f0fdf4",
+                  marginBottom: "24px",
+                }}
               >
-                <option>Coding</option>
-                <option>Design</option>
-                <option>Business</option>
-                <option>Communication</option>
-              </select>
-
-              <select
-                value={offerSkill.level}
-                onChange={(e) =>
-                  setOfferSkill({
-                    ...offerSkill,
-                    level: e.target.value,
-                  })
-                }
-              >
-                <option>Beginner</option>
-                <option>Intermediate</option>
-                <option>Advanced</option>
-              </select>
-
-              <button onClick={addSkill}>
-                Add Skill
-              </button>
-
-            </div>
+                <h3 style={{ color: "#065f46", marginBottom: "8px" }}>🎓 Student Account</h3>
+                <p style={{ color: "#047857", marginBottom: "14px", fontSize: "0.95rem" }}>
+                  You are logged in as a <strong>Student</strong>. Browse courses on the <strong>Skills</strong> page and click <em>Request to Learn</em> to study with an instructor. (To teach and post courses, register a Teacher account).
+                </p>
+                <button
+                  onClick={() => setPage("skills")}
+                  style={{
+                    background: "#059669",
+                    color: "#fff",
+                    border: "none",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontWeight: "600",
+                  }}
+                >
+                  Browse Available Courses
+                </button>
+              </div>
+            )}
 
             {/* =================================================
                 REQUESTS
@@ -1726,6 +1839,34 @@ export default function App() {
                 })
               }
             />
+
+            <div style={{ margin: "12px 0 6px 0", textAlign: "left" }}>
+              <label style={{ fontWeight: "600", display: "block", marginBottom: "8px", fontSize: "0.95rem" }}>
+                Select Role:
+              </label>
+              <div style={{ display: "flex", gap: "16px", marginBottom: "8px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.95rem" }}>
+                  <input
+                    type="radio"
+                    name="registrationRole"
+                    value="student"
+                    checked={newUser.role !== "teacher"}
+                    onChange={() => setNewUser({ ...newUser, role: "student" })}
+                  />
+                  <span>🎓 Student</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.95rem" }}>
+                  <input
+                    type="radio"
+                    name="registrationRole"
+                    value="teacher"
+                    checked={newUser.role === "teacher"}
+                    onChange={() => setNewUser({ ...newUser, role: "teacher" })}
+                  />
+                  <span>👨‍🏫 Teacher / Instructor</span>
+                </label>
+              </div>
+            </div>
 
             <input
               type="password"
