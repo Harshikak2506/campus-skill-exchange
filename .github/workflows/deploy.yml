@@ -57,9 +57,8 @@ jobs:
               exit 1
             fi
           else
-            echo "❌ Error: Missing Render credentials."
-            echo "Please configure either RENDER_DEPLOY_HOOK_URL or both RENDER_API_KEY and RENDER_SERVICE_ID in GitHub Secrets."
-            exit 1
+            echo "ℹ️ Note: Render credentials not configured in GitHub Secrets."
+            echo "Render will auto-deploy via its native GitHub repository integration."
           fi
 
   deploy-frontend:
@@ -79,27 +78,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify Vercel Secrets
+      - name: Check Vercel Secrets
+        id: vercel-check
         run: |
           if [ -z "${{ secrets.VERCEL_TOKEN }}" ] || [ -z "${{ secrets.VERCEL_ORG_ID }}" ] || [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
-            echo "❌ Error: Missing Vercel secrets."
-            echo "Please ensure VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID are set in GitHub Secrets."
-            exit 1
+            echo "has_secrets=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Note: Vercel secrets not configured in GitHub Secrets. Vercel automatically deploys pushes to main branch via Git."
+          else
+            echo "has_secrets=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Pull Vercel Environment Information
+        if: steps.vercel-check.outputs.has_secrets == 'true'
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: npx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
+        if: steps.vercel-check.outputs.has_secrets == 'true'
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: npx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel
+        if: steps.vercel-check.outputs.has_secrets == 'true'
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
