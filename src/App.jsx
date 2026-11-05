@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { io } from "socket.io-client";
 import "./App.css";
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
@@ -93,6 +94,20 @@ export default function App() {
   });
   const [adminSearch, setAdminSearch] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
+
+  // =========================================================
+  // SQUAD CHAT STATE (WEBSOCKETS)
+  // =========================================================
+
+  const [squadMessages, setSquadMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [onlineCount, setOnlineCount] = useState(1);
+  const [onlineUsersList, setOnlineUsersList] = useState([]);
+  const [typingUser, setTypingUser] = useState("");
+  const [socketConnected, setSocketConnected] = useState(false);
+  const socketRef = useRef(null);
+  const chatMessagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   // =========================================================
   // SAVE LOCAL DATA
@@ -239,6 +254,143 @@ export default function App() {
       loadRequests();
     }
   }, [currentUser, page]);
+
+  // =========================================================
+  // SQUAD CHAT WEBSOCKET CONNECTION & MESSAGING
+  // =========================================================
+
+  useEffect(() => {
+    const socketServerUrl = API_BASE_URL || window.location.origin;
+    const socket = io(socketServerUrl, {
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 5,
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      console.log("🟢 Connected to Squad Chat Socket:", socket.id);
+      setSocketConnected(true);
+
+      if (currentUser) {
+        socket.emit("join_squad", {
+          id: currentUser.id,
+          name: currentUser.name,
+          role: currentUser.role || "student",
+        });
+      }
+    });
+
+    socket.on("disconnect", () => {
+      console.log("🔴 Disconnected from Squad Chat Socket");
+      setSocketConnected(false);
+    });
+
+    socket.on("online_users_count", (count) => {
+      setOnlineCount(count);
+    });
+
+    socket.on("online_users_list", (users) => {
+      if (Array.isArray(users)) {
+        setOnlineUsersList(users);
+      }
+    });
+
+    socket.on("receive_squad_message", (message) => {
+      setSquadMessages((prev) => [...prev, message]);
+    });
+
+    socket.on("user_typing", (data) => {
+      if (data && data.name) {
+        setTypingUser(data.name);
+      }
+    });
+
+    socket.on("user_stop_typing", () => {
+      setTypingUser("");
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  // Update socket identity when user logs in or out
+  useEffect(() => {
+    if (socketRef.current && socketRef.current.connected) {
+      if (currentUser) {
+        socketRef.current.emit("join_squad", {
+          id: currentUser.id,
+          name: currentUser.name,
+          role: currentUser.role || "student",
+        });
+      }
+    }
+  }, [currentUser]);
+
+  // Load message history from MongoDB
+  const loadSquadHistory = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/squad/messages`);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setSquadMessages(data);
+      }
+    } catch (err) {
+      console.error("Could not load squad chat history:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadSquadHistory();
+  }, []);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (page === "squad" && chatMessagesEndRef.current) {
+      chatMessagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [squadMessages, page, typingUser]);
+
+  const sendSquadMessage = (e) => {
+    if (e) e.preventDefault();
+
+    if (!currentUser) {
+      alert("Please login first to chat with the squad!");
+      setShowLogin(true);
+      return;
+    }
+
+    if (!chatInput.trim()) return;
+
+    if (socketRef.current) {
+      socketRef.current.emit("send_squad_message", {
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderRole: currentUser.role || "student",
+        message: chatInput.trim(),
+      });
+
+      socketRef.current.emit("stop_typing");
+    }
+
+    setChatInput("");
+  };
+
+  const handleChatInputChange = (e) => {
+    setChatInput(e.target.value);
+
+    if (socketRef.current && currentUser) {
+      socketRef.current.emit("typing", { name: currentUser.name });
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        if (socketRef.current) {
+          socketRef.current.emit("stop_typing");
+        }
+      }, 1500);
+    }
+  };
 
   // =========================================================
   // ADMIN DASHBOARD FUNCTIONS
@@ -858,6 +1010,32 @@ export default function App() {
             Skills
           </button>
 
+          <button
+            onClick={() => setPage("squad")}
+            style={{
+              backgroundColor: page === "squad" ? "#1e40af" : "#2563eb",
+              color: "white",
+              borderRadius: "8px",
+              padding: "6px 14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontWeight: page === "squad" ? "700" : "500",
+            }}
+          >
+            💬 Squad Chat
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                backgroundColor: socketConnected ? "#22c55e" : "#f59e0b",
+                display: "inline-block",
+              }}
+              title={socketConnected ? "Live WebSocket Active" : "Reconnecting"}
+            />
+          </button>
+
           {currentUser && (
             <>
               <button
@@ -934,12 +1112,163 @@ export default function App() {
             and teach skills across campus.
           </p>
 
-          <button
-            onClick={() => setPage("skills")}
-          >
-            Explore Skills
-          </button>
+          <div style={{ display: "flex", gap: "14px", justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={() => setPage("skills")}
+            >
+              Explore Skills
+            </button>
 
+            <button
+              onClick={() => setPage("squad")}
+              style={{
+                backgroundColor: "#0ea5e9",
+                color: "white",
+              }}
+            >
+              💬 Join Squad Chat
+            </button>
+          </div>
+
+        </section>
+      )}
+
+      {/* =====================================================
+          SQUAD CHAT PAGE (WEBSOCKETS)
+      ===================================================== */}
+
+      {page === "squad" && (
+        <section className="squad-chat-section">
+          <div className="squad-chat-container">
+            {/* Header */}
+            <div className="squad-header">
+              <div className="squad-header-left">
+                <h2>💬 Campus Squad Chat</h2>
+                <p>Real-time campus community room for all students, teachers, and faculty</p>
+              </div>
+              <div className="squad-header-right">
+                <span className="online-badge">
+                  <span className="pulse-dot" />
+                  {onlineCount} Online
+                </span>
+                <span className="connection-status">
+                  {socketConnected ? "🟢 Live" : "🟡 Reconnecting..."}
+                </span>
+              </div>
+            </div>
+
+            {/* Active Members Bar */}
+            {onlineUsersList.length > 0 && (
+              <div className="squad-members-bar">
+                <span style={{ fontSize: "0.85rem", color: "#64748b", fontWeight: "600" }}>
+                  Active in Squad:
+                </span>
+                <div className="squad-members-chips">
+                  {onlineUsersList.slice(0, 10).map((u, i) => (
+                    <span key={i} className="member-chip">
+                      {u.role === "admin" ? "🛡️" : u.role === "teacher" ? "👨‍🏫" : "🎓"}{" "}
+                      {u.name}
+                    </span>
+                  ))}
+                  {onlineUsersList.length > 10 && (
+                    <span className="member-chip-more">+{onlineUsersList.length - 10} more</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Messages Container */}
+            <div className="squad-messages-area">
+              {squadMessages.length === 0 ? (
+                <div className="squad-empty-state">
+                  <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>👋</div>
+                  <h3>Welcome to Campus Squad Chat!</h3>
+                  <p>Be the first to say hello to your campus squad and professors!</p>
+                </div>
+              ) : (
+                squadMessages.map((msg, index) => {
+                  const isOwn =
+                    currentUser &&
+                    (msg.senderId === currentUser.id ||
+                      msg.senderName === currentUser.name);
+
+                  const roleBadge =
+                    msg.senderRole === "admin"
+                      ? { label: "Admin", class: "role-admin", icon: "🛡️" }
+                      : msg.senderRole === "teacher"
+                      ? { label: "Teacher", class: "role-teacher", icon: "👨‍🏫" }
+                      : { label: "Student", class: "role-student", icon: "🎓" };
+
+                  const timeStr = msg.createdAt
+                    ? new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "";
+
+                  return (
+                    <div
+                      key={msg._id || index}
+                      className={`squad-message-row ${isOwn ? "row-own" : "row-other"}`}
+                    >
+                      {!isOwn && (
+                        <div className="sender-avatar">
+                          {msg.senderName ? msg.senderName.charAt(0).toUpperCase() : "U"}
+                        </div>
+                      )}
+
+                      <div className={`squad-bubble ${isOwn ? "bubble-own" : "bubble-other"}`}>
+                        {!isOwn && (
+                          <div className="bubble-header">
+                            <span className="sender-name">{msg.senderName}</span>
+                            <span className={`sender-role-pill ${roleBadge.class}`}>
+                              {roleBadge.icon} {roleBadge.label}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="bubble-text">{msg.message}</div>
+
+                        <div className="bubble-time">{timeStr}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Typing indicator */}
+              {typingUser && typingUser !== currentUser?.name && (
+                <div className="typing-indicator-bar">
+                  <span className="typing-dots">✍️ <strong>{typingUser}</strong> is typing...</span>
+                </div>
+              )}
+
+              <div ref={chatMessagesEndRef} />
+            </div>
+
+            {/* Chat Input Footer */}
+            <div className="squad-input-footer">
+              {!currentUser ? (
+                <div className="squad-login-prompt">
+                  <span>Log in to send messages and chat with the squad in real-time.</span>
+                  <button onClick={() => setShowLogin(true)}>Login to Chat</button>
+                </div>
+              ) : (
+                <form onSubmit={sendSquadMessage} className="squad-input-form">
+                  <input
+                    type="text"
+                    placeholder={`Message the squad as ${currentUser.name}...`}
+                    value={chatInput}
+                    onChange={handleChatInputChange}
+                    maxLength={500}
+                  />
+                  <button type="submit" disabled={!chatInput.trim()}>
+                    Send 🚀
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
         </section>
       )}
 

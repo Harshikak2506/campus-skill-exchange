@@ -1,4 +1,6 @@
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
@@ -6,6 +8,14 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+  },
+});
+
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
@@ -19,8 +29,8 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB Connected");
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on port ${PORT}`);
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server and WebSockets running on port ${PORT}`);
     });
   })
   .catch((err) => {
@@ -198,6 +208,41 @@ const CourseRequest = mongoose.model(
   "CourseRequest",
   requestsSchema,
   "courserequests"
+);
+
+/* =========================================================
+   SQUAD CHAT SCHEMA & MODEL
+========================================================= */
+
+const squadMessageSchema = new mongoose.Schema(
+  {
+    senderId: {
+      type: String,
+      required: true,
+    },
+    senderName: {
+      type: String,
+      required: true,
+    },
+    senderRole: {
+      type: String,
+      enum: ["student", "teacher", "admin"],
+      default: "student",
+    },
+    message: {
+      type: String,
+      required: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+const SquadMessage = mongoose.model(
+  "SquadMessage",
+  squadMessageSchema,
+  "squadmessages"
 );
 
 
@@ -1129,6 +1174,99 @@ app.delete("/api/requests/:id", authenticateToken, async (req, res) => {
     console.log("DELETE REQUEST ERROR:", err);
     res.status(500).json({ message: "Server Error" });
   }
+});
+
+/* =========================================================
+   SQUAD CHAT WEBSOCKET & REST API
+========================================================= */
+
+// REST endpoint to load message history
+app.get("/api/squad/messages", async (req, res) => {
+  try {
+    const messages = await SquadMessage.find()
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    // Return in chronological order
+    res.status(200).json(messages.reverse());
+  } catch (err) {
+    console.log("SQUAD HISTORY ERROR:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+// Real-Time Socket.IO Management
+const onlineSquadUsers = new Map(); // socket.id -> { id, name, role }
+
+io.on("connection", (socket) => {
+  console.log("🟢 WebSocket Connected:", socket.id);
+
+  // User joins squad chat
+  socket.on("join_squad", (userData) => {
+    if (userData && (userData.id || userData.name)) {
+      onlineSquadUsers.set(socket.id, {
+        id: userData.id || socket.id,
+        name: userData.name || "Campus Member",
+        role: userData.role || "student",
+      });
+
+      // Broadcast active user count & list to everyone
+      io.emit("online_users_count", onlineSquadUsers.size);
+      io.emit(
+        "online_users_list",
+        Array.from(onlineSquadUsers.values()).map((u) => ({
+          id: u.id,
+          name: u.name,
+          role: u.role,
+        }))
+      );
+    } else {
+      io.emit("online_users_count", onlineSquadUsers.size);
+    }
+  });
+
+  // User sends a squad message
+  socket.on("send_squad_message", async (data) => {
+    try {
+      if (!data || !data.message || !data.message.trim()) return;
+
+      const newMsg = await SquadMessage.create({
+        senderId: data.senderId || "anonymous",
+        senderName: data.senderName || "Campus Member",
+        senderRole: data.senderRole || "student",
+        message: data.message.trim(),
+      });
+
+      // Broadcast the saved message to all clients in real time
+      io.emit("receive_squad_message", newMsg);
+    } catch (err) {
+      console.error("Error saving squad message:", err);
+    }
+  });
+
+  // Typing indicators
+  socket.on("typing", (data) => {
+    socket.broadcast.emit("user_typing", data);
+  });
+
+  socket.on("stop_typing", () => {
+    socket.broadcast.emit("user_stop_typing");
+  });
+
+  // Client disconnected
+  socket.on("disconnect", () => {
+    onlineSquadUsers.delete(socket.id);
+    io.emit("online_users_count", onlineSquadUsers.size);
+    io.emit(
+      "online_users_list",
+      Array.from(onlineSquadUsers.values()).map((u) => ({
+        id: u.id,
+        name: u.name,
+        role: u.role,
+      }))
+    );
+    console.log("🔴 WebSocket Disconnected:", socket.id);
+  });
 });
 
 /* =========================================================

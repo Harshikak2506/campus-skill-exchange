@@ -506,6 +506,331 @@ body {
   margin-top: 50px;
 }
 
+/* ================= SQUAD CHAT (WEBSOCKETS) ================= */
+
+.squad-chat-section {
+  max-width: 960px;
+  margin: 30px auto;
+  padding: 0 16px;
+}
+
+.squad-chat-container {
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  height: 80vh;
+  min-height: 580px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.squad-header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: white;
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.squad-header-left h2 {
+  font-size: 1.5rem;
+  margin-bottom: 4px;
+  color: #ffffff;
+}
+
+.squad-header-left p {
+  font-size: 0.9rem;
+  color: #bfdbfe;
+}
+
+.squad-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.online-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  backdrop-filter: blur(4px);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #4ade80;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+  animation: pulse-animation 2s infinite;
+}
+
+@keyframes pulse-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(74, 222, 128, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+  }
+}
+
+.connection-status {
+  font-size: 0.85rem;
+  color: #e0e7ff;
+}
+
+.squad-members-bar {
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+}
+
+.squad-members-chips {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.member-chip {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.member-chip-more {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.squad-messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.squad-empty-state {
+  margin: auto;
+  text-align: center;
+  color: #64748b;
+  padding: 40px 20px;
+}
+
+.squad-empty-state h3 {
+  font-size: 1.25rem;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
+.squad-message-row {
+  display: flex;
+  gap: 10px;
+  max-width: 80%;
+}
+
+.squad-message-row.row-own {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.squad-message-row.row-other {
+  align-self: flex-start;
+}
+
+.sender-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.squad-bubble {
+  padding: 12px 18px;
+  border-radius: 18px;
+  position: relative;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.squad-bubble.bubble-own {
+  background: #2563eb;
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.squad-bubble.bubble-other {
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.bubble-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.sender-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #1e3a8a;
+}
+
+.sender-role-pill {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.role-student {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.role-teacher {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.role-admin {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.bubble-text {
+  font-size: 0.95rem;
+}
+
+.bubble-time {
+  font-size: 0.72rem;
+  margin-top: 4px;
+  text-align: right;
+  opacity: 0.75;
+}
+
+.typing-indicator-bar {
+  align-self: flex-start;
+  padding: 6px 14px;
+  background: rgba(226, 232, 240, 0.6);
+  border-radius: 14px;
+  font-size: 0.85rem;
+  color: #475569;
+  font-style: italic;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.squad-input-footer {
+  background: #ffffff;
+  padding: 16px 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.squad-login-prompt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #64748b;
+  font-size: 0.95rem;
+  padding: 8px 0;
+}
+
+.squad-login-prompt button {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.squad-input-form {
+  display: flex;
+  gap: 12px;
+}
+
+.squad-input-form input {
+  flex: 1;
+  padding: 14px 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.squad-input-form input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.squad-input-form button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 0 24px;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.squad-input-form button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.squad-input-form button:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* ================= RESPONSIVE ================= */
 
 @media (max-width: 900px) {
@@ -530,5 +855,13 @@ body {
 
   .skills-grid {
     padding: 20px;
+  }
+
+  .squad-chat-container {
+    height: 75vh;
+  }
+
+  .squad-message-row {
+    max-width: 90%;
   }
 }
