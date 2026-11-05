@@ -189,6 +189,58 @@ export default function App() {
   }, []);
 
   // =========================================================
+  // LOAD REQUESTS FROM MONGODB (REAL-TIME STUDENT-INSTRUCTOR)
+  // =========================================================
+
+  const loadRequests = async (overrideToken) => {
+    const token = overrideToken || localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/requests`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        const cleaned = data.map((r) => ({
+          id: r._id || r.id,
+          _id: r._id || r.id,
+          student: r.studentName || r.student,
+          studentId: r.studentId,
+          studentEmail: r.studentEmail || "",
+          studentPhone: r.studentPhone || "",
+          teacher: r.teacherName || r.teacher,
+          teacherId: r.teacherId,
+          teacherEmail: r.teacherEmail || "",
+          teacherPhone: r.teacherPhone || "",
+          skill: r.skillName || r.skill,
+          status: r.status,
+          message: r.message || "",
+          createdAt: r.createdAt,
+          phone: r.teacherPhone || r.phone || "N/A",
+          email: r.teacherEmail || r.email || "N/A",
+        }));
+
+        setRequests(cleaned);
+        localStorage.setItem("requests", JSON.stringify(cleaned));
+      }
+    } catch (error) {
+      console.error("Could not load requests from MongoDB:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      loadRequests();
+    }
+  }, [currentUser, page]);
+
+  // =========================================================
   // ADMIN DASHBOARD FUNCTIONS
   // =========================================================
 
@@ -349,6 +401,10 @@ export default function App() {
       // Set logged-in user
       setCurrentUser(student);
 
+      if (data.token) {
+        loadRequests(data.token);
+      }
+
       setShowLogin(false);
       setPage("dashboard");
 
@@ -452,18 +508,21 @@ export default function App() {
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("currentUser");
+    localStorage.removeItem("requests");
+    setRequests([]);
 
     setCurrentUser(null);
     setPage("home");
   };
 
   // =========================================================
-  // SEND REQUEST
+  // SEND REQUEST (MONGODB-BACKED)
   // =========================================================
 
-  const sendRequest = (skill) => {
+  const sendRequest = async (skill) => {
     if (!currentUser) {
-      alert("Please login first.");
+      alert("Please login first to request courses.");
+      setShowLogin(true);
       return;
     }
 
@@ -477,55 +536,117 @@ export default function App() {
 
     const alreadyRequested = requests.some(
       (r) =>
-        r.student === currentUser.name &&
+        (r.student === currentUser.name || (r.studentId && r.studentId === currentUser.id)) &&
         r.skill === skill.name &&
-        r.teacher === skill.teacher
+        (r.teacher === skill.teacher || (skill.teacherId && r.teacherId === skill.teacherId)) &&
+        r.status === "Pending"
     );
 
     if (alreadyRequested) {
-      alert("Request already sent.");
+      alert("You have already sent a pending request for this course.");
       return;
     }
 
-    const teacher = users.find(
-      (u) =>
-        u.name === skill.teacher ||
-        (skill.teacherId && u.id === skill.teacherId)
-    ) || {
-      name: skill.teacher,
-      phone: skill.teacherPhone || "Available upon request acceptance",
-      email: skill.teacherEmail || "Available upon request acceptance",
-    };
+    const token = localStorage.getItem("token");
 
-    const newRequest = {
-      id: Date.now(),
-      student: currentUser.name,
-      teacher: skill.teacher,
-      teacherId: skill.teacherId || "",
-      skill: skill.name,
-      status: "Pending",
-      phone: teacher.phone || skill.teacherPhone || "N/A",
-      email: teacher.email || skill.teacherEmail || "N/A",
-    };
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/requests`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          skillId: skill.id || skill._id || "",
+          skillName: skill.name,
+          teacherName: skill.teacher,
+          teacherId: skill.teacherId || "",
+        }),
+      });
 
-    setRequests((prevRequests) => [
-      ...prevRequests,
-      newRequest,
-    ]);
+      const data = await response.json();
 
-    alert("Request Sent to Instructor!");
+      if (!response.ok) {
+        alert(data.message || "Failed to send request.");
+        return;
+      }
+
+      const r = data.request;
+      const formattedRequest = {
+        id: r._id || r.id,
+        _id: r._id || r.id,
+        student: r.studentName,
+        studentId: r.studentId,
+        studentEmail: r.studentEmail || "",
+        studentPhone: r.studentPhone || "",
+        teacher: r.teacherName,
+        teacherId: r.teacherId,
+        teacherEmail: r.teacherEmail || "",
+        teacherPhone: r.teacherPhone || "",
+        skill: r.skillName,
+        status: r.status,
+        phone: r.teacherPhone || "N/A",
+        email: r.teacherEmail || "N/A",
+      };
+
+      setRequests((prevRequests) => [
+        formattedRequest,
+        ...prevRequests.filter((item) => (item.id || item._id) !== formattedRequest.id),
+      ]);
+
+      alert(`✅ Request Sent to ${skill.teacher}! The instructor will see it on their dashboard.`);
+    } catch (error) {
+      console.error("sendRequest error:", error);
+      alert("Cannot connect to server. Make sure the backend is running.");
+    }
   };
 
   // =========================================================
-  // UPDATE REQUEST
+  // UPDATE REQUEST (MONGODB-BACKED)
   // =========================================================
 
-  const updateRequest = (id, status) => {
-    setRequests((prevRequests) =>
-      prevRequests.map((r) =>
-        r.id === id ? { ...r, status } : r
-      )
-    );
+  const updateRequest = async (id, status) => {
+    const token = localStorage.getItem("token");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/requests/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.message || `Failed to update request status.`);
+        return;
+      }
+
+      const updated = data.request;
+
+      setRequests((prevRequests) =>
+        prevRequests.map((r) =>
+          (r.id === id || r._id === id)
+            ? {
+                ...r,
+                status: updated.status,
+                studentEmail: updated.studentEmail || r.studentEmail,
+                studentPhone: updated.studentPhone || r.studentPhone,
+                teacherEmail: updated.teacherEmail || r.teacherEmail,
+                teacherPhone: updated.teacherPhone || r.teacherPhone,
+              }
+            : r
+        )
+      );
+
+      alert(`Request has been ${status}!`);
+    } catch (error) {
+      console.error("updateRequest error:", error);
+      alert("Could not update request on server. Please try again.");
+    }
   };
 
   // =========================================================
@@ -625,7 +746,7 @@ export default function App() {
 
   const bookSession = (requestId, date, time) => {
     const request = requests.find(
-      (r) => r.id === requestId
+      (r) => (r._id || r.id) === requestId
     );
 
     if (!request) {
@@ -703,7 +824,8 @@ export default function App() {
   const unread = currentUser
     ? requests.filter(
         (r) =>
-          r.teacher === currentUser.name &&
+          (r.teacher === currentUser.name ||
+            (r.teacherId && r.teacherId === currentUser.id)) &&
           r.status === "Pending"
       ).length
     : 0;
@@ -938,10 +1060,10 @@ export default function App() {
                       {requests.some(
                         (r) =>
                           currentUser &&
-                          r.student ===
-                            currentUser.name &&
+                          (r.student === currentUser.name || (r.studentId && r.studentId === currentUser.id)) &&
                           r.skill === skill.name &&
-                          r.teacher === skill.teacher
+                          (r.teacher === skill.teacher || (skill.teacherId && r.teacherId === skill.teacherId)) &&
+                          r.status === "Pending"
                       )
                         ? "Requested"
                         : "Request to Learn"}
@@ -993,8 +1115,8 @@ export default function App() {
                   {
                     requests.filter(
                       (r) =>
-                        r.student ===
-                        currentUser.name
+                        r.student === currentUser.name ||
+                        (r.studentId && r.studentId === currentUser.id)
                     ).length
                   }
                 </h3>
@@ -1190,20 +1312,21 @@ export default function App() {
 
                 {requests.filter(
                   (r) =>
-                    r.teacher === currentUser.name
+                    r.teacher === currentUser.name ||
+                    (r.teacherId && r.teacherId === currentUser.id)
                 ).length === 0 ? (
                   <p>No requests received yet.</p>
                 ) : (
                   requests
                     .filter(
                       (r) =>
-                        r.teacher ===
-                        currentUser.name
+                        r.teacher === currentUser.name ||
+                        (r.teacherId && r.teacherId === currentUser.id)
                     )
                     .map((r) => (
 
                       <div
-                        key={r.id}
+                        key={r._id || r.id}
                         className="request-card"
                       >
 
@@ -1212,22 +1335,24 @@ export default function App() {
                         </strong>
 
                         <p>
-                          Student: {r.student}
+                          Student: <strong>{r.student}</strong>
                         </p>
 
                         <p>
-                          Status: {r.status}
+                          Status: <span style={{
+                            fontWeight: "bold",
+                            color: r.status === "Accepted" ? "#16a34a" : r.status === "Rejected" ? "#dc2626" : "#d97706"
+                          }}>{r.status}</span>
                         </p>
 
-                        {r.status ===
-                        "Pending" ? (
+                        {r.status === "Pending" ? (
 
                           <div className="actions">
 
                             <button
                               onClick={() =>
                                 updateRequest(
-                                  r.id,
+                                  r._id || r.id,
                                   "Accepted"
                                 )
                               }
@@ -1238,7 +1363,7 @@ export default function App() {
                             <button
                               onClick={() =>
                                 updateRequest(
-                                  r.id,
+                                  r._id || r.id,
                                   "Rejected"
                                 )
                               }
@@ -1250,13 +1375,13 @@ export default function App() {
 
                         ) : (
                           <>
-                            <p>
-                              📞 {r.phone}
-                            </p>
-
-                            <p>
-                              ✉️ {r.email}
-                            </p>
+                            {r.status === "Accepted" && (
+                              <div style={{ marginTop: "8px", fontSize: "0.9rem", color: "#334155" }}>
+                                <p style={{ fontWeight: "600", color: "#0f766e" }}>Student Contact Details:</p>
+                                <p>📞 {r.studentPhone || r.phone || "Not provided"}</p>
+                                <p>✉️ {r.studentEmail || r.email || "Not provided"}</p>
+                              </div>
+                            )}
                           </>
                         )}
 
@@ -1275,20 +1400,21 @@ export default function App() {
 
                 {requests.filter(
                   (r) =>
-                    r.student === currentUser.name
+                    r.student === currentUser.name ||
+                    (r.studentId && r.studentId === currentUser.id)
                 ).length === 0 ? (
                   <p>No requests sent yet.</p>
                 ) : (
                   requests
                     .filter(
                       (r) =>
-                        r.student ===
-                        currentUser.name
+                        r.student === currentUser.name ||
+                        (r.studentId && r.studentId === currentUser.id)
                     )
                     .map((r) => (
 
                       <div
-                        key={r.id}
+                        key={r._id || r.id}
                         className="request-card"
                       >
 
@@ -1297,28 +1423,28 @@ export default function App() {
                         </strong>
 
                         <p>
-                          Teacher: {r.teacher}
+                          Teacher: <strong>{r.teacher}</strong>
                         </p>
 
                         <p>
-                          Status: {r.status}
+                          Status: <span style={{
+                            fontWeight: "bold",
+                            color: r.status === "Accepted" ? "#16a34a" : r.status === "Rejected" ? "#dc2626" : "#d97706"
+                          }}>{r.status}</span>
                         </p>
 
-                        {r.status ===
-                          "Accepted" && (
+                        {r.status === "Accepted" && (
                           <>
-                            <p>
-                              📞 {r.phone}
-                            </p>
-
-                            <p>
-                              ✉️ {r.email}
-                            </p>
+                            <div style={{ marginTop: "8px", fontSize: "0.9rem", color: "#334155" }}>
+                              <p style={{ fontWeight: "600", color: "#1d4ed8" }}>Instructor Contact Details:</p>
+                              <p>📞 {r.teacherPhone || r.phone || "Available"}</p>
+                              <p>✉️ {r.teacherEmail || r.email || "Available"}</p>
+                            </div>
 
                             <button
                               onClick={() =>
                                 bookSession(
-                                  r.id,
+                                  r._id || r.id,
                                   "2026-10-01",
                                   "16:00"
                                 )

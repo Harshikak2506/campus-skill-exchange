@@ -133,6 +133,73 @@ const Skill = mongoose.model(
   "skills"
 );
 
+/* =========================================================
+   REQUESTS SCHEMA & MODEL
+========================================================= */
+
+const requestsSchema = new mongoose.Schema(
+  {
+    studentId: {
+      type: String,
+      required: true,
+    },
+    studentName: {
+      type: String,
+      required: true,
+    },
+    studentEmail: {
+      type: String,
+      default: "",
+    },
+    studentPhone: {
+      type: String,
+      default: "",
+    },
+    teacherId: {
+      type: String,
+      required: true,
+    },
+    teacherName: {
+      type: String,
+      required: true,
+    },
+    teacherEmail: {
+      type: String,
+      default: "",
+    },
+    teacherPhone: {
+      type: String,
+      default: "",
+    },
+    skillId: {
+      type: String,
+      default: "",
+    },
+    skillName: {
+      type: String,
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ["Pending", "Accepted", "Rejected"],
+      default: "Pending",
+    },
+    message: {
+      type: String,
+      default: "",
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+const CourseRequest = mongoose.model(
+  "CourseRequest",
+  requestsSchema,
+  "courserequests"
+);
+
 
 /* =========================================================
    HOME / TEST ROUTE
@@ -876,6 +943,193 @@ app.delete(
   }
 );
 
+
+/* =========================================================
+   REQUESTS API ENDPOINTS
+   Real-time Student-Instructor Course Requests
+========================================================= */
+
+/* CREATE REQUEST */
+app.post("/api/requests", authenticateToken, async (req, res) => {
+  try {
+    const { skillId, skillName, teacherName, teacherId, message } = req.body;
+
+    if (!skillName || (!teacherName && !teacherId)) {
+      return res.status(400).json({
+        message: "Skill name and instructor information are required.",
+      });
+    }
+
+    // Lookup authentic student profile
+    const student = await Student.findOne({ studentId: req.user.studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student account not found." });
+    }
+
+    // Lookup teacher profile from DB if possible
+    const instructor = await Student.findOne({
+      $or: [
+        ...(teacherId ? [{ studentId: teacherId }] : []),
+        ...(teacherName ? [{ name: teacherName }] : []),
+      ],
+    });
+
+    const finalTeacherId = instructor ? instructor.studentId : (teacherId || "");
+    const finalTeacherName = instructor ? instructor.name : (teacherName || "Instructor");
+    const finalTeacherEmail = instructor ? instructor.email : "";
+    const finalTeacherPhone = instructor ? (instructor.phone || "") : "";
+
+    // Prevent requesting own course
+    if (
+      student.studentId === finalTeacherId ||
+      student.name.trim().toLowerCase() === finalTeacherName.trim().toLowerCase()
+    ) {
+      return res.status(400).json({
+        message: "You cannot request your own course.",
+      });
+    }
+
+    // Check for duplicate pending requests
+    const existing = await CourseRequest.findOne({
+      studentId: student.studentId,
+      skillName: skillName.trim(),
+      $or: [
+        { teacherId: finalTeacherId },
+        { teacherName: finalTeacherName },
+      ],
+      status: "Pending",
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        message: "You have already sent a pending request for this course.",
+      });
+    }
+
+    const newRequest = await CourseRequest.create({
+      studentId: student.studentId,
+      studentName: student.name,
+      studentEmail: student.email,
+      studentPhone: student.phone || "",
+      teacherId: finalTeacherId,
+      teacherName: finalTeacherName,
+      teacherEmail: finalTeacherEmail,
+      teacherPhone: finalTeacherPhone,
+      skillId: skillId || "",
+      skillName: skillName.trim(),
+      message: message || "",
+      status: "Pending",
+    });
+
+    res.status(201).json({
+      message: "Request successfully sent to instructor!",
+      request: newRequest,
+    });
+  } catch (err) {
+    console.log("CREATE REQUEST ERROR:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+/* GET REQUESTS FOR CURRENT USER */
+app.get("/api/requests", authenticateToken, async (req, res) => {
+  try {
+    const user = await Student.findOne({ studentId: req.user.studentId });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let filter = {};
+
+    if (user.role === "admin") {
+      filter = {};
+    } else {
+      filter = {
+        $or: [
+          { teacherId: user.studentId },
+          { teacherName: user.name },
+          { studentId: user.studentId },
+          { studentName: user.name },
+        ],
+      };
+    }
+
+    const requests = await CourseRequest.find(filter).sort({ createdAt: -1 });
+
+    res.status(200).json(requests);
+  } catch (err) {
+    console.log("GET REQUESTS ERROR:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+/* UPDATE REQUEST STATUS (Accept or Reject) */
+app.put("/api/requests/:id", authenticateToken, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!["Accepted", "Rejected", "Pending"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    const courseRequest = await CourseRequest.findById(req.params.id);
+    if (!courseRequest) {
+      return res.status(404).json({ message: "Request not found" });
+    }
+
+    // Ensure only the instructor of this course (or admin) can accept/reject
+    const isTeacher =
+      courseRequest.teacherId === req.user.studentId ||
+      courseRequest.teacherName === req.user.studentId ||
+      (req.user.name && courseRequest.teacherName === req.user.name);
+    const isAdmin = req.user.role === "admin";
+
+    if (!isTeacher && !isAdmin) {
+      return res.status(403).json({
+        message: "Only the designated instructor or an admin can update this request.",
+      });
+    }
+
+    courseRequest.status = status;
+    await courseRequest.save();
+
+    res.status(200).json({
+      message: `Request marked as ${status}`,
+      request: courseRequest,
+    });
+  } catch (err) {
+    console.log("UPDATE REQUEST ERROR:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+/* DELETE REQUEST */
+app.delete("/api/requests/:id", authenticateToken, async (req, res) => {
+  try {
+    const courseRequest = await CourseRequest.findById(req.params.id);
+    if (!courseRequest) {
+      return res.status(404).json({ message: "Request not found" });
+    }
+
+    const isStudent = courseRequest.studentId === req.user.studentId;
+    const isTeacher = courseRequest.teacherId === req.user.studentId;
+    const isAdmin = req.user.role === "admin";
+
+    if (!isStudent && !isTeacher && !isAdmin) {
+      return res.status(403).json({
+        message: "Not authorized to delete this request.",
+      });
+    }
+
+    await CourseRequest.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      message: "Request deleted successfully",
+    });
+  } catch (err) {
+    console.log("DELETE REQUEST ERROR:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
 
 /* =========================================================
    404 ROUTE
